@@ -1,0 +1,54 @@
+name: Trigger Jenkins Library Consumer
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trigger-jenkins-lib-develop
+  cancel-in-progress: false
+
+jobs:
+  trigger-jenkins:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Jenkins branch pipeline
+        env:
+          JENKINS_URL: ${{ secrets.JENKINS_URL }}
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+          JENKINS_BUILD_TOKEN: ${{ secrets.JENKINS_BUILD_TOKEN }}
+          JENKINS_JOB_PATH: ${{ secrets.JENKINS_JOB_PATH }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${JENKINS_URL}" ] || [ -z "${JENKINS_USER}" ] || [ -z "${JENKINS_API_TOKEN}" ] || [ -z "${JENKINS_JOB_PATH}" ]; then
+            echo "Required Jenkins secrets are not configured"
+            exit 1
+          fi
+
+          CRUMB_RESPONSE="$(curl --silent --show-error --fail \
+            --user "${JENKINS_USER}:${JENKINS_API_TOKEN}" \
+            "${JENKINS_URL%/}/crumbIssuer/api/json")"
+
+          CRUMB_FIELD="$(echo "${CRUMB_RESPONSE}" | jq -r '.crumbRequestField')"
+          CRUMB_VALUE="$(echo "${CRUMB_RESPONSE}" | jq -r '.crumb')"
+
+          BUILD_ENDPOINT="${JENKINS_URL%/}/${JENKINS_JOB_PATH#/}/build"
+          if [ -n "${JENKINS_BUILD_TOKEN}" ]; then
+            BUILD_ENDPOINT="${BUILD_ENDPOINT}?token=${JENKINS_BUILD_TOKEN}"
+          fi
+
+          curl --silent --show-error --fail \
+            --request POST \
+            --user "${JENKINS_USER}:${JENKINS_API_TOKEN}" \
+            --header "${CRUMB_FIELD}: ${CRUMB_VALUE}" \
+            "${BUILD_ENDPOINT}"
+
+          echo "Triggered Jenkins job: ${BUILD_ENDPOINT}"

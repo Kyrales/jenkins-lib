@@ -42,7 +42,7 @@ Json file
   "profiles": {
     "ci_uh_MR": {
       "enabled": true,
-      "description": "Отладочные подмены для MR пайплайнов УХД",
+      "description": "Отладочные подмены для MR пайплайнов УХ",
       "replacements": [
         {
           "fileId": "debug-ci-uh-mr-jobConfiguration",
