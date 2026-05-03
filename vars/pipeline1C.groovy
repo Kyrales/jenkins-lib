@@ -91,6 +91,7 @@ void call() {
                                             expression { config.needLoadExtensions() }
                                         }
                                         steps {
+                                            restoreDebugOverridesIfNeeded()
                                             timeout(time: config.timeoutOptions.getBinaries, unit: TimeUnit.MINUTES) {
                                                 createDir('build/out/cfe')
                                                 // Соберем или загрузим cfe из исходников и положим их в папку build/out/cfe
@@ -231,9 +232,9 @@ void call() {
                             }
                             stage('Распаковка ИБ') {
                                 steps {
-                                     lock(resource: 'infobase_unzip_lock', quantity: 1) {
+                                    lock(resource: 'infobase_unzip_lock', quantity: 1) {
                                         unzipInfobase()
-                                     }
+                                    }
                                 }
                             }
 
@@ -285,9 +286,9 @@ void call() {
                             }
                             stage('Распаковка ИБ') {
                                 steps {
-                                     lock(resource: 'infobase_unzip_lock', quantity: 1) {
+                                    lock(resource: 'infobase_unzip_lock', quantity: 1) {
                                         unzipInfobase()
-                                     }
+                                    }
                                 }
                             }
 
@@ -317,9 +318,9 @@ void call() {
                             }
                             stage('Распаковка ИБ') {
                                 steps {
-                                     lock(resource: 'infobase_unzip_lock', quantity: 1) {
+                                    lock(resource: 'infobase_unzip_lock', quantity: 1) {
                                         unzipInfobase()
-                                     }
+                                    }
                                 }
                             }
 
@@ -361,9 +362,9 @@ void call() {
                             }
                             stage('Распаковка ИБ') {
                                 steps {
-                                     lock(resource: 'infobase_unzip_lock', quantity: 1) {
+                                    lock(resource: 'infobase_unzip_lock', quantity: 1) {
                                         unzipInfobase()
-                                     }
+                                    }
                                 }
                             }
 

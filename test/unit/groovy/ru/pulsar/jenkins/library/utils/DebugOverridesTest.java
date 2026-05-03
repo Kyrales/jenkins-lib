@@ -56,7 +56,8 @@ class DebugOverridesTest {
   @Test
   void validateTargetPath_rejectsUncPath() {
     assertThatThrownBy(() -> DebugOverrides.validateTargetPath("//server/share/file.json"))
-      .isInstanceOf(IllegalArgumentException.class);
+      .isInstanceOf(IllegalArgumentException.class)
+      .hasMessageContaining("UNC target paths are not allowed");
   }
 
   @Test
@@ -121,6 +122,13 @@ class DebugOverridesTest {
   }
 
   @Test
+  void buildStashIncludes_rejectsUnsafeTargets() {
+    assertThatThrownBy(() -> DebugOverrides.buildStashIncludes(List.of("tools/*.json")))
+      .isInstanceOf(IllegalArgumentException.class)
+      .hasMessageContaining("Downstream targets are not stash-safe");
+  }
+
+  @Test
   void shouldTreatConfigFileProviderErrorAsMissingPlugin_detectsMissingDslMethod() {
     Exception exception = new RuntimeException("No such DSL method 'configFileProvider' found among steps");
 
@@ -139,8 +147,37 @@ class DebugOverridesTest {
   }
 
   @Test
+  void shouldTreatConfigFileProviderErrorAsInvalidControlFile_detectsInvalidJsonException() {
+    Exception exception = new RuntimeException(
+      "Failed to parse jenkins-debug-overrides-control: Unexpected character at line 1"
+    );
+    exception.setStackTrace(new StackTraceElement[] {
+      new StackTraceElement("applyDebugOverridesIfNeeded", "loadControlConfig", "applyDebugOverridesIfNeeded.groovy", 77)
+    });
+
+    assertThat(DebugOverrides.shouldTreatConfigFileProviderErrorAsInvalidControlFile(exception))
+      .isTrue();
+  }
+
+  @Test
+  void shouldTreatConfigFileProviderErrorAsInvalidControlFile_ignoresUnrelatedJsonErrors() {
+    Exception exception = new RuntimeException("Unexpected character at line 1");
+
+    assertThat(DebugOverrides.shouldTreatConfigFileProviderErrorAsInvalidControlFile(exception))
+      .isFalse();
+  }
+
+  @Test
   void shouldTreatUnstashErrorAsMissingStash_detectsMissingStash() {
     Exception exception = new RuntimeException("No such saved stash 'debug-overrides-files'");
+
+    assertThat(DebugOverrides.shouldTreatUnstashErrorAsMissingStash(exception))
+      .isTrue();
+  }
+
+  @Test
+  void shouldTreatUnstashErrorAsMissingStash_normalizesCurlyQuotes() {
+    Exception exception = new RuntimeException("No such saved stash \u2018debug-overrides-files\u2019");
 
     assertThat(DebugOverrides.shouldTreatUnstashErrorAsMissingStash(exception))
       .isTrue();

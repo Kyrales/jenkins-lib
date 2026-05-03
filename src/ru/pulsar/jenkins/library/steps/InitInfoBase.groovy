@@ -38,7 +38,7 @@ class InitInfoBase implements Serializable {
         
         //  Возможность пропуска этапа по наличию файла отладки.
         String templateDBPath = config.initInfoBaseOptions.templateDBPath
-        if (FileUtils.isFileDebugExists(templateDBPath, "debug_ci.cfg")) {
+        if (templateDBPath && FileUtils.isFileDebugExists(templateDBPath, "debug_ci.cfg")) {
            Logger.println("Пропуск этапа. Найден файл отладки debug_ci.cfg")
            steps.stash('init-allure', 'build/out/allure/**', true)
            steps.stash('init-cucumber', 'build/out/cucumber/**', true)
@@ -76,11 +76,20 @@ class InitInfoBase implements Serializable {
 
                 command += settingsIncrement
                 def migrationStatusFile = "build/migration-exit-status.log"
-                command += " --exitCodePath \"${migrationStatusFile}\""
+                boolean bspConfiguration = isBspConfiguration(steps)
+                if (bspConfiguration) {
+                    command += " --exitCodePath \"${migrationStatusFile}\""
+                } else {
+                    Logger.println("Конфигурация не на БСП, запуск миграции ИБ без контроля ${migrationStatusFile}")
+                }
                 // Запуск миграции
                 steps.catchError {
-                    VRunner.exec(command, true)
-                    exitStatuses.put(command, VRunner.readExitStatusFromFile(migrationStatusFile))
+                    Integer exitStatus = VRunner.exec(command, true)
+                    if (bspConfiguration) {
+                        exitStatuses.put(command, VRunner.readExitStatusFromFile(migrationStatusFile, exitStatus))
+                    } else {
+                        exitStatuses.put(command, exitStatus)
+                    }
                 }
             } else {
                 Logger.println("Шаг миграции ИБ выключен")
@@ -128,5 +137,20 @@ class InitInfoBase implements Serializable {
             // Throws exception
             steps.error("Инициализация ИБ завершилась с ошибками")
         }
+    }
+
+    private boolean isBspConfiguration(IStepExecutor steps) {
+        if (config.srcDir == null || config.srcDir.trim().isEmpty()) {
+            Logger.println("Не указан srcDir, конфигурация считается не на БСП")
+            return false
+        }
+
+        String sourceDir = config.srcDir.replace('\\', '/')
+        FileWrapper[] xmlFiles = steps.findFiles("${sourceDir}/**/ОбновлениеИнформационнойБазыБСП.xml") ?: new FileWrapper[0]
+        FileWrapper[] mdoFiles = steps.findFiles("${sourceDir}/**/ОбновлениеИнформационнойБазыБСП.mdo") ?: new FileWrapper[0]
+        boolean bspConfiguration = xmlFiles.length > 0 || mdoFiles.length > 0
+
+        Logger.println("Определение БСП по исходникам ${sourceDir}: ${bspConfiguration ? 'БСП' : 'не БСП'}")
+        return bspConfiguration
     }
 }

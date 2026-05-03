@@ -12,6 +12,10 @@ class DebugOverrides implements Serializable {
         'tools/VAParams.json'
     ].asImmutable()
 
+    // buildStashIncludes joins entries with commas, so downstream targets must
+    // remain plain relative paths without commas or Ant wildcard syntax.
+    static final String STASH_SAFE_TARGET_PATTERN = /^[^,*?{}]+$/
+
     static String resolveProfileKey(String jobName) {
         if (jobName == null) {
             return null
@@ -73,16 +77,16 @@ class DebugOverrides implements Serializable {
             throw new IllegalArgumentException('Replacement target must be non-empty')
         }
 
+        if (normalized.startsWith('//')) {
+            throw new IllegalArgumentException("UNC target paths are not allowed: ${target}")
+        }
+
         if (normalized.startsWith('/')) {
             throw new IllegalArgumentException("Absolute target paths are not allowed: ${target}")
         }
 
         if (normalized ==~ /^[A-Za-z]:\/.*/) {
             throw new IllegalArgumentException("Windows absolute target paths are not allowed: ${target}")
-        }
-
-        if (normalized.startsWith('//')) {
-            throw new IllegalArgumentException("UNC target paths are not allowed: ${target}")
         }
 
         List<String> segments = normalized.split('/') as List<String>
@@ -112,6 +116,13 @@ class DebugOverrides implements Serializable {
     }
 
     static String buildStashIncludes(List<String> targets) {
+        List<String> unsafeTargets = targets.findAll { !(it ==~ STASH_SAFE_TARGET_PATTERN) }
+        if (!unsafeTargets.isEmpty()) {
+            throw new IllegalArgumentException(
+                "Downstream targets are not stash-safe: ${unsafeTargets.join(', ')}"
+            )
+        }
+
         targets.join(',')
     }
 
@@ -153,11 +164,35 @@ class DebugOverrides implements Serializable {
         )
     }
 
+    static boolean shouldTreatConfigFileProviderErrorAsInvalidControlFile(Exception exception) {
+        String className = exception?.class?.name ?: ''
+        String message = exception?.message ?: ''
+        String lowerCaseMessage = message.toLowerCase()
+        boolean isJsonParseError =
+            className.endsWith('JsonException') ||
+            className.endsWith('JSONException') ||
+            className.endsWith('JsonParseException') ||
+            lowerCaseMessage.contains('net.sf.json') ||
+            lowerCaseMessage.contains('jsonparseexception') ||
+            lowerCaseMessage.contains('jsonexception') ||
+            lowerCaseMessage.contains('unexpected character') ||
+            lowerCaseMessage.contains('unable to parse')
+        boolean referencesControlFile =
+            message.contains(CONTROL_FILE_ID) ||
+            lowerCaseMessage.contains(CONTROL_FILE_VARIABLE.toLowerCase()) ||
+            lowerCaseMessage.contains('readjson') ||
+            (exception?.stackTrace ?: []).any { it.methodName == 'loadControlConfig' }
+
+        return isJsonParseError && referencesControlFile
+    }
+
     static boolean shouldTreatUnstashErrorAsMissingStash(Exception exception) {
         String message = exception?.message ?: ''
+        String normalizedMessage = message
+            .replace('\u2018', "'")
+            .replace('\u2019', "'")
 
-        return message.contains("No such saved stash '${STASH_NAME}'") ||
-            message.contains("No such saved stash ‘${STASH_NAME}’") ||
-            (message.contains('No such saved stash') && message.contains(STASH_NAME))
+        return normalizedMessage.contains("No such saved stash '${STASH_NAME}'") ||
+            (normalizedMessage.contains('No such saved stash') && normalizedMessage.contains(STASH_NAME))
     }
 }
